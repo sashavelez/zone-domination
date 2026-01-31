@@ -1,53 +1,868 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zone Domination</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
-      body {
-        font-family: 'Fredoka', sans-serif;
-        background: #020617;
-        color: #f8fafc;
-        overflow-x: hidden;
-        user-select: none;
-      }
-      .perspective-1000 {
-        perspective: 1500px;
-      }
-      .custom-scrollbar::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.1);
-      }
-      .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
-      }
-      @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zone Domination | Misión Galáctica</title>
+
+  <!-- Tailwind por CDN (ok para GitHub Pages) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+
+    :root { --primary-glow: rgba(79, 70, 229, 0.4); }
+
+    body {
+      font-family: 'Fredoka', sans-serif;
+      background: #020617;
+      color: #f8fafc;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    .perspective-1000 { perspective: 1500px; }
+
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+    @keyframes floatJuice {
+      0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+      20% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
+      100% { transform: translate(-50%, -150%) scale(1.5); opacity: 0; }
+    }
+    .animate-float-juice {
+      animation: floatJuice 2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    .glass-card {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .board-container {
+      transform: rotateX(20deg) rotateZ(0deg);
+      transition: transform 0.5s ease-out;
+    }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100">
-    <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+
+<body class="bg-slate-950">
+  <div id="root"></div>
+
+  <!-- React UMD (sin imports) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel Standalone: compila JSX en el navegador -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Tu app en JSX, compilada por Babel -->
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // --- CONSTANTS & TYPES ---
+    const TOTAL_TILES = 48;
+    const SUBJECTS = ['Matemáticas', 'Ciencias', 'Historia', 'Lenguaje', 'Geografía', 'Astronomía'];
+    const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b'];
+    const AVATARS = ['🚀', '🤖', '👾', '🧬', '🧠', '🧙', '🦖', '🌟'];
+    const SAVE_KEY_PREFIX = 'zd_save_single_';
+
+    const TileType = {
+      SUBJECT: 'SUBJECT',
+      BONUS: 'BONUS',
+      EMPTY: 'EMPTY',
+      MYSTERY: 'MYSTERY'
+    };
+
+    const ZoneType = {
+      CRITICAL_THINKING: 'Pensamiento Crítico',
+      MEMORY: 'Memoria',
+      CREATIVITY: 'Creatividad',
+      MOTOR: 'Motor'
+    };
+
+    const ZONE_COSTS = {
+      [ZoneType.CRITICAL_THINKING]: 4,
+      [ZoneType.MEMORY]: 4,
+      [ZoneType.CREATIVITY]: 4,
+      [ZoneType.MOTOR]: 6,
+    };
+
+    const BOARD_TILES = Array.from({ length: TOTAL_TILES }, (_, i) => {
+      if (i === 0) return { type: TileType.EMPTY, label: '🚀' };
+      if (i % 5 === 0) return { type: TileType.MYSTERY, label: '🌀' };
+      if (i % 2 === 0) return { type: TileType.SUBJECT, label: '?' };
+      if (i % 3 === 0) return { type: TileType.BONUS, label: '⭐' };
+      return { type: TileType.EMPTY, label: '' };
+    });
+
+    // --- “GEMINI” SERVICE (modo DEMO/OFFLINE para GitHub Pages) ---
+    // En GitHub Pages NO puedes usar process.env, y una API key pública se expone.
+    // Por ahora, dejamos respuestas simuladas para que el juego corra.
+    const gemini = {
+      async fetchCommentary(playerName, lastRoll, event = null) {
+        const lines = [
+          `🚀 ${playerName} sacó ${lastRoll}. ¡A romperla!`,
+          `🛰️ ${playerName} tiró ${lastRoll}. La galaxia tiembla.`,
+          `👾 ${playerName}: ${lastRoll}. ¿Eso fue suerte o destino?`,
+          `🌟 ${playerName} con ${lastRoll}. ¡Modo héroe activado!`,
+        ];
+        return lines[Math.floor(Math.random() * lines.length)];
+      },
+      async fetchQuestion(subject) {
+        const bank = {
+          'Matemáticas': [
+            { question: "¿Cuánto es 7+8?", answer: "15" },
+            { question: "¿Raíz cuadrada de 81?", answer: "9" }
+          ],
+          'Ciencias': [
+            { question: "¿Estado del agua a 100°C?", answer: "Vapor" },
+            { question: "¿Qué órgano bombea sangre?", answer: "Corazón" }
+          ],
+          'Historia': [
+            { question: "¿Civilización de las pirámides?", answer: "Egipto" },
+            { question: "¿Descubridor de América (según libros tradicionales)?", answer: "Colón" }
+          ],
+          'Lenguaje': [
+            { question: "Sinónimo de 'rápido' (una palabra)", answer: "Veloz" },
+            { question: "Antónimo de 'alto' (una palabra)", answer: "Bajo" }
+          ],
+          'Geografía': [
+            { question: "¿Océano más grande?", answer: "Pacífico" },
+            { question: "¿País con la Torre Eiffel?", answer: "Francia" }
+          ],
+          'Astronomía': [
+            { question: "¿Planeta rojo?", answer: "Marte" },
+            { question: "¿Nuestra estrella?", answer: "Sol" }
+          ],
+        };
+        const list = bank[subject] || bank['Astronomía'];
+        const pick = list[Math.floor(Math.random() * list.length)];
+        return { subject, question: pick.question, answer: pick.answer };
+      },
+      async fetchExplanation(q, a) {
+        return `Porque la respuesta correcta es “${a}”.`;
+      },
+      async fetchMysteryEvent() {
+        const events = [
+          { title: "Agujero de Gusano", description: "¡Atajo temporal!", effectType: "MOVE", value: 3 },
+          { title: "Tormenta Solar", description: "Pierdes impulso cósmico…", effectType: "MOVE", value: -2 },
+          { title: "Carga Estelar", description: "Ganas puntos por energía extra.", effectType: "POINTS", value: 2 },
+          { title: "Campo de Asteroides", description: "¡Cuidado! Retrocedes.", effectType: "MOVE", value: -1 },
+        ];
+        return events[Math.floor(Math.random() * events.length)];
+      },
+      async fetchRiddle() {
+        const riddles = [
+          { riddle: "Vuelo sin alas, lloro sin ojos. ¿Qué soy?", answer: "Nube" },
+          { riddle: "Me rompo sin tocarme. ¿Qué soy?", answer: "Silencio" },
+          { riddle: "Cuanto más quito, más grande soy. ¿Qué soy?", answer: "Agujero" },
+        ];
+        return riddles[Math.floor(Math.random() * riddles.length)];
+      }
+    };
+
+    // --- UI COMPONENTS ---
+    const Button = ({ onClick, disabled, className, variant = 'primary', children }) => {
+      const variants = {
+        primary: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20",
+        secondary: "bg-slate-700 hover:bg-slate-600 text-slate-100",
+        danger: "bg-rose-600 hover:bg-rose-500 text-white",
+      };
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ${variants[variant]} ${className || ""}`}
+        >
+          {children}
+        </button>
+      );
+    };
+
+    const Card = ({ children, className }) => (
+      <div className={`glass-card rounded-[2rem] p-6 shadow-2xl ${className || ""}`}>
+        {children}
+      </div>
+    );
+
+    const Modal = ({ isOpen, children }) => {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="w-full max-w-lg animate-in fade-in zoom-in duration-300">
+            {children}
+          </div>
+        </div>
+      );
+    };
+
+    // --- CHALLENGE COMPONENTS ---
+    const MotorChallenge = ({ onComplete }) => {
+      const [errors, setErrors] = useState(0);
+      const [status, setStatus] = useState('IDLE');
+      const handleTouch = () => { if (status === 'PLAYING') setErrors(e => e + 1); };
+
+      return (
+        <Card className="text-center space-y-6 bg-slate-900">
+          <h2 className="text-3xl font-black italic">⚡ PULSO GALÁCTICO</h2>
+          <p className="text-slate-400">Cruza sin tocar los bordes.</p>
+          <div className="relative h-64 bg-black/50 rounded-2xl cursor-crosshair border border-white/10 overflow-hidden">
+            <svg className="w-full h-full" viewBox="0 0 400 200">
+              <path d="M 20 100 C 100 0, 150 200, 250 50 S 380 150, 380 100" fill="none" stroke="#1e293b" strokeWidth="30" strokeLinecap="round" />
+              <path d="M 20 100 C 100 0, 150 200, 250 50 S 380 150, 380 100" fill="none" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round"
+                onMouseEnter={handleTouch}
+              />
+              <circle cx="20" cy="100" r="15" fill="#10b981" className="cursor-pointer"
+                onMouseDown={() => setStatus('PLAYING')}
+                onTouchStart={() => setStatus('PLAYING')}
+              />
+              <circle cx="380" cy="100" r="15" fill="#3b82f6"
+                onMouseEnter={() => { if (status === 'PLAYING') onComplete(errors === 0 ? 3 : 1); }}
+                onTouchStart={() => { if (status === 'PLAYING') onComplete(errors === 0 ? 3 : 1); }}
+              />
+            </svg>
+          </div>
+          <div className="font-bold text-rose-400">ERRORES: {errors}</div>
+        </Card>
+      );
+    };
+
+    const MemoryChallenge = ({ onComplete }) => {
+      const [sequence, setSequence] = useState([]);
+      const [userSequence, setUserSequence] = useState([]);
+      const [active, setActive] = useState(null);
+      const [state, setState] = useState('START');
+      const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'];
+
+      const start = () => {
+        const next = [...sequence, Math.floor(Math.random() * 4)];
+        setSequence(next);
+        setUserSequence([]);
+        setState('WATCHING');
+        let i = 0;
+        const interval = setInterval(() => {
+          setActive(next[i]);
+          setTimeout(() => setActive(null), 400);
+          i++;
+          if (i >= next.length) { clearInterval(interval); setState('PLAYING'); }
+        }, 800);
+      };
+
+      const handlePress = (idx) => {
+        if (state !== 'PLAYING') return;
+        setActive(idx); setTimeout(() => setActive(null), 200);
+        const nextUser = [...userSequence, idx];
+        setUserSequence(nextUser);
+        if (idx !== sequence[nextUser.length - 1]) { setSequence([]); setState('START'); return; }
+        if (nextUser.length === sequence.length) {
+          if (sequence.length >= 4) onComplete(0);
+          else setTimeout(start, 1000);
+        }
+      };
+
+      return (
+        <Card className="text-center space-y-6">
+          <h2 className="text-3xl font-black italic">👁️ MEMORIA CUÁNTICA</h2>
+          <div className="grid grid-cols-2 gap-4 max-w-[240px] mx-auto">
+            {colors.map((c, i) => (
+              <div key={i} onClick={() => handlePress(i)}
+                className={`w-24 h-24 rounded-2xl transition-all ${active === i ? 'brightness-150 scale-105 shadow-xl' : 'opacity-70'} ${c}`}
+              />
+            ))}
+          </div>
+          {state === 'START' && <Button onClick={start}>INICIAR</Button>}
+          <div className="font-bold">NIVEL: {sequence.length} / 4</div>
+        </Card>
+      );
+    };
+
+    const LogicChallenge = ({ onComplete }) => {
+      const [data, setData] = useState(null);
+      const [input, setInput] = useState('');
+      useEffect(() => { gemini.fetchRiddle().then(setData); }, []);
+      if (!data) return <div className="text-center animate-pulse">GENERANDO ACERTIJO...</div>;
+      return (
+        <Card className="text-center space-y-6">
+          <h2 className="text-3xl font-black italic">🧠 LÓGICA INTERESTELAR</h2>
+          <p className="text-xl italic text-indigo-200">"{data.riddle}"</p>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            className="w-full bg-slate-900 border-2 border-slate-700 rounded-xl p-4 text-center outline-none focus:border-indigo-500"
+            placeholder="Respuesta..."
+          />
+          <Button onClick={() => { if (input.toLowerCase().trim() === data.answer.toLowerCase().trim()) onComplete(0); }}
+            className="w-full"
+          >
+            VERIFICAR
+          </Button>
+        </Card>
+      );
+    };
+
+    const CreativityChallenge = ({ onComplete }) => {
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+
+      const start = (e) => { setIsDrawing(true); draw(e); };
+      const end = () => {
+        setIsDrawing(false);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+      };
+
+      const draw = (e) => {
+        if (!isDrawing) return;
+        const ctx = canvasRef.current.getContext('2d');
+        const rect = canvasRef.current.getBoundingClientRect();
+        const clientX = e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX);
+        const clientY = e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY);
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      };
+
+      return (
+        <Card className="text-center space-y-6">
+          <h2 className="text-3xl font-black italic">🎨 CREATIVIDAD COSMOS</h2>
+          <p>Dibuja un "Agujero Negro"</p>
+          <canvas
+            ref={canvasRef}
+            width={400}
+            height={300}
+            onMouseDown={start}
+            onMouseMove={draw}
+            onMouseUp={end}
+            onMouseLeave={end}
+            onTouchStart={start}
+            onTouchMove={draw}
+            onTouchEnd={end}
+            className="w-full bg-black rounded-xl border border-white/10 touch-none"
+          />
+          <Button onClick={() => onComplete(0)} className="w-full">LISTO</Button>
+        </Card>
+      );
+    };
+
+    // --- MAIN APP ---
+    const App = () => {
+      const [phase, setPhase] = useState('SETUP');
+      const [players, setPlayers] = useState([]);
+      const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
+      const [diceResult, setDiceResult] = useState(1);
+      const [loading, setLoading] = useState(false);
+      const [activeQuestion, setActiveQuestion] = useState(null);
+      const [activeMystery, setActiveMystery] = useState(null);
+      const [feedback, setFeedback] = useState(null);
+      const [aiCommentary, setAiCommentary] = useState('');
+      const [particles, setParticles] = useState([]);
+      const [challenge, setChallenge] = useState(null);
+      const [savedGames, setSavedGames] = useState([]);
+
+      const currentPlayer = players[currentPlayerIndex];
+
+      useEffect(() => {
+        const saved = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(SAVE_KEY_PREFIX)) saved.push(JSON.parse(localStorage.getItem(k)));
+        }
+        setSavedGames(saved.sort((a, b) => b.id - a.id));
+      }, [phase]);
+
+      const spawnJuice = (text, color) => {
+        const id = Date.now();
+        setParticles(p => [...p, { id, text, color }]);
+        setTimeout(() => setParticles(p => p.filter(x => x.id !== id)), 2000);
+      };
+
+      const saveGame = () => {
+        const id = Date.now();
+        localStorage.setItem(`${SAVE_KEY_PREFIX}${id}`, JSON.stringify({
+          id, date: new Date().toLocaleString(), players, currentPlayerIndex
+        }));
+        spawnJuice("GUARDADO", "#10b981");
+      };
+
+      const handleSetup = (count, names, avatars) => {
+        const newPlayers = Array.from({ length: count }, (_, i) => ({
+          id: i,
+          name: names[i] || `Explorador ${i + 1}`,
+          avatar: avatars[i],
+          color: PLAYER_COLORS[i],
+          currentTileIndex: 0,
+          zonePoints: 0,
+          conqueredZones: [],
+          inventory: []
+        }));
+        setPlayers(newPlayers);
+        setPhase('BOARD');
+      };
+
+      const rollDice = async () => {
+        setPhase('DICE_ROLLING');
+        const roll = Math.floor(Math.random() * 6) + 1;
+        setDiceResult(roll);
+        const comment = await gemini.fetchCommentary(currentPlayer.name, roll);
+        setAiCommentary(comment);
+        setTimeout(() => movePlayer(roll), 1000);
+      };
+
+      const movePlayer = (steps) => {
+        let moved = 0;
+        const interval = setInterval(() => {
+          setPlayers(prev => {
+            const updated = [...prev];
+            updated[currentPlayerIndex].currentTileIndex =
+              (updated[currentPlayerIndex].currentTileIndex + 1) % TOTAL_TILES;
+            return updated;
+          });
+          moved++;
+          if (moved >= steps) {
+            clearInterval(interval);
+            handleLanding();
+          }
+        }, 200);
+      };
+
+      const handleLanding = async () => {
+        const tile = BOARD_TILES[players[currentPlayerIndex].currentTileIndex];
+        if (tile.type === TileType.SUBJECT) {
+          setLoading(true);
+          const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
+          const q = await gemini.fetchQuestion(subject);
+          setActiveQuestion(q);
+          setPhase('QUESTION');
+          setLoading(false);
+        } else if (tile.type === TileType.MYSTERY) {
+          setLoading(true);
+          const ev = await gemini.fetchMysteryEvent();
+          setActiveMystery(ev);
+          setPhase('MYSTERY');
+          setLoading(false);
+        } else if (tile.type === TileType.BONUS) {
+          spawnJuice("+1 PTO", "#f59e0b");
+          updatePlayer({ zonePoints: currentPlayer.zonePoints + 1 });
+          nextTurn();
+        } else {
+          nextTurn();
+        }
+      };
+
+      const updatePlayer = (data) => {
+        setPlayers(prev => {
+          const updated = [...prev];
+          updated[currentPlayerIndex] = { ...updated[currentPlayerIndex], ...data };
+          return updated;
+        });
+      };
+
+      const nextTurn = () => {
+        setCurrentPlayerIndex(i => (i + 1) % players.length);
+        setPhase('BOARD');
+        setAiCommentary('');
+        setFeedback(null);
+        setChallenge(null);
+      };
+
+      const checkAnswer = async (input) => {
+        const isCorrect =
+          input.toLowerCase().trim() === activeQuestion.answer.toLowerCase().trim();
+
+        if (isCorrect) {
+          spawnJuice("+2 PTS", "#4f46e5");
+          updatePlayer({ zonePoints: currentPlayer.zonePoints + 2 });
+          setFeedback({ isCorrect: true, explanation: "¡Misión cumplida!", answer: activeQuestion.answer });
+        } else {
+          setLoading(true);
+          const expl = await gemini.fetchExplanation(activeQuestion.question, activeQuestion.answer);
+          setFeedback({ isCorrect: false, explanation: expl, answer: activeQuestion.answer });
+          setLoading(false);
+        }
+        setActiveQuestion(null);
+      };
+
+      const conquerZone = (zone) => {
+        if (currentPlayer.zonePoints >= ZONE_COSTS[zone] && !currentPlayer.conqueredZones.includes(zone)) {
+          setChallenge(zone);
+        }
+      };
+
+      const finishChallenge = (points = 0) => {
+        const updatedZones = [...currentPlayer.conqueredZones, challenge];
+        updatePlayer({
+          conqueredZones: updatedZones,
+          zonePoints: currentPlayer.zonePoints + points
+        });
+        if (updatedZones.length >= 4) setPhase('WIN');
+        else nextTurn();
+      };
+
+      if (phase === 'SETUP') return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-slate-950 overflow-y-auto">
+          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-rose-500 mb-8">
+            ZONE DOMINATION
+          </h1>
+          <div className="grid md:grid-cols-2 gap-8 w-full max-w-6xl">
+            <Card className="space-y-6">
+              <h2 className="text-2xl font-bold">NUEVA MISIÓN</h2>
+              <SetupForm onComplete={handleSetup} />
+            </Card>
+            <Card className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar">
+              <h2 className="text-2xl font-bold">MISIONES GUARDADAS</h2>
+              {savedGames.length === 0 ? (
+                <p className="text-slate-500 italic">No hay registros...</p>
+              ) : savedGames.map(g => (
+                <div
+                  key={g.id}
+                  onClick={() => { setPlayers(g.players); setCurrentPlayerIndex(g.currentPlayerIndex); setPhase('BOARD'); }}
+                  className="p-4 bg-slate-800 rounded-xl cursor-pointer hover:bg-indigo-900/30 transition-all border border-white/5"
+                >
+                  <p className="text-indigo-400 text-xs font-bold">{g.date}</p>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {g.players.map(p => <span key={p.id}>{p.avatar} {p.name}</span>)}
+                  </div>
+                </div>
+              ))}
+            </Card>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden relative">
+          {/* Background Glow */}
+          <div
+            className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+            style={{ background: `radial-gradient(circle at center, ${currentPlayer?.color} 0%, transparent 70%)` }}
+          />
+
+          {/* Particles */}
+          <div className="fixed inset-0 pointer-events-none z-[200]">
+            {particles.map(p => (
+              <div
+                key={p.id}
+                className="absolute left-1/2 top-1/2 text-5xl font-black animate-float-juice"
+                style={{ color: p.color }}
+              >
+                {p.text}
+              </div>
+            ))}
+          </div>
+
+          {/* HUD */}
+          <header className="p-4 bg-slate-900/80 backdrop-blur-xl border-b border-white/10 flex justify-between items-center z-50">
+            <div className="flex items-center gap-4">
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl border-2 border-white/20 shadow-inner relative group"
+                style={{ backgroundColor: currentPlayer.color }}
+              >
+                {currentPlayer.avatar}
+                {aiCommentary && (
+                  <div className="absolute top-0 left-full ml-4 w-48 bg-indigo-950 p-3 rounded-2xl border border-indigo-400 text-xs italic animate-in fade-in slide-in-from-left">
+                    "{aiCommentary}"
+                  </div>
+                )}
+              </div>
+              <div>
+                <h2 className="text-xl font-black">{currentPlayer.name}</h2>
+                <p className="text-indigo-400 font-bold">PTS: {currentPlayer.zonePoints}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={saveGame} variant="secondary" className="w-12 h-12 p-0 text-xl">💾</Button>
+              {Object.values(ZoneType).map(z => (
+                <div
+                  key={z}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-all ${
+                    currentPlayer.conqueredZones.includes(z)
+                      ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_10px_#10b981]'
+                      : 'bg-slate-800 border-slate-700 opacity-20'
+                  }`}
+                >
+                  {z === ZoneType.CRITICAL_THINKING && '🧠'}
+                  {z === ZoneType.MEMORY && '👁️'}
+                  {z === ZoneType.CREATIVITY && '🎨'}
+                  {z === ZoneType.MOTOR && '⚡'}
+                </div>
+              ))}
+            </div>
+          </header>
+
+          {/* BOARD */}
+          <main className="flex-1 flex flex-col items-center justify-center perspective-1000 p-4">
+            <div className="relative grid grid-cols-13 grid-rows-13 gap-1 w-full max-w-4xl aspect-square board-container bg-slate-900/50 p-4 rounded-[3rem] border-4 border-white/5 shadow-2xl">
+              {BOARD_TILES.map((t, i) => {
+                let x = 0, y = 0;
+                if (i < 13) { x = i; y = 0; }
+                else if (i < 25) { x = 12; y = i - 12; }
+                else if (i < 37) { x = 36 - i; y = 12; }
+                else { x = 0; y = 48 - i; }
+
+                const isCurrent = players.some(p => p.currentTileIndex === i && p.id === currentPlayer.id);
+
+                return (
+                  <div
+                    key={i}
+                    style={{ gridColumnStart: x + 1, gridRowStart: y + 1 }}
+                    className={`relative border rounded-lg flex items-center justify-center font-black text-xs transition-all ${
+                      t.type === TileType.SUBJECT ? 'bg-indigo-600/10 border-indigo-500/30'
+                      : t.type === TileType.MYSTERY ? 'bg-purple-600/20 border-purple-400/30'
+                      : t.type === TileType.BONUS ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-slate-800/20 border-white/5'
+                    } ${isCurrent ? 'ring-2 ring-white bg-white/10 z-10' : ''}`}
+                  >
+                    {t.label}
+                    {players.map(p => p.currentTileIndex === i && (
+                      <div
+                        key={p.id}
+                        className={`absolute text-2xl transition-all ${
+                          p.id === currentPlayer.id ? 'animate-bounce z-20 scale-125' : 'opacity-40'
+                        }`}
+                        style={{ filter: `drop-shadow(0 0 8px ${p.color})` }}
+                      >
+                        {p.avatar}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+
+              <div className="col-start-5 col-end-10 row-start-5 row-end-10 flex flex-col items-center justify-center gap-4 glass-card rounded-[2rem]">
+                {phase === 'DICE_ROLLING' ? (
+                  <div className="text-8xl animate-spin">🎲</div>
+                ) : phase === 'BOARD' ? (
+                  <button
+                    onClick={rollDice}
+                    className="w-32 h-32 rounded-full bg-indigo-600 border-8 border-indigo-400 text-3xl font-black shadow-2xl hover:scale-110 active:scale-95 transition-all"
+                  >
+                    TIRAR
+                  </button>
+                ) : (
+                  <div className="text-2xl font-black animate-pulse">MISIÓN EN CURSO...</div>
+                )}
+              </div>
+            </div>
+          </main>
+
+          {/* FOOTER */}
+          <footer className="p-4 bg-slate-900 border-t border-white/10 flex justify-center z-50">
+            <Button
+              onClick={() => setPhase('CONQUEST')}
+              className="w-full max-w-lg text-2xl py-4 bg-gradient-to-r from-slate-800 to-indigo-900"
+            >
+              MAPA DE CONQUISTA
+            </Button>
+          </footer>
+
+          {/* MODALS */}
+          <Modal isOpen={phase === 'QUESTION'}>
+            <Card className="text-center space-y-8 p-10">
+              <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black inline-block">
+                {activeQuestion?.subject}
+              </div>
+              <h2 className="text-3xl font-black italic">"{activeQuestion?.question}"</h2>
+              <QuestionInput onAnswer={checkAnswer} />
+            </Card>
+          </Modal>
+
+          <Modal isOpen={!!feedback}>
+            <Card className={`text-center space-y-6 border-4 ${
+              feedback?.isCorrect ? 'border-emerald-500 bg-emerald-950/90' : 'border-rose-500 bg-rose-950/90'
+            }`}>
+              <div className="text-6xl">{feedback?.isCorrect ? '✨' : '📡'}</div>
+              <h2 className="text-3xl font-black italic">
+                {feedback?.isCorrect ? '¡EXITO!' : 'FALLO EN TRANSMISIÓN'}
+              </h2>
+              <div className="bg-black/30 p-6 rounded-2xl">
+                <p className="text-xs text-slate-400 font-bold uppercase mb-1">Dato de Base:</p>
+                <p className="text-2xl font-black">{feedback?.answer}</p>
+              </div>
+              <p className="italic text-sm opacity-80">{feedback?.explanation}</p>
+              <Button
+                onClick={nextTurn}
+                variant={feedback?.isCorrect ? 'primary' : 'danger'}
+                className="w-full"
+              >
+                CONTINUAR
+              </Button>
+            </Card>
+          </Modal>
+
+          <Modal isOpen={phase === 'MYSTERY'}>
+            <Card className="text-center space-y-6 bg-purple-900/90 border-purple-400 p-10">
+              <div className="text-7xl animate-bounce">🌀</div>
+              <h2 className="text-3xl font-black italic">{activeMystery?.title}</h2>
+              <p className="text-lg">{activeMystery?.description}</p>
+              <Button
+                onClick={() => {
+                  if (activeMystery.effectType === 'MOVE') {
+                    updatePlayer({
+                      currentTileIndex: (currentPlayer.currentTileIndex + activeMystery.value + TOTAL_TILES) % TOTAL_TILES
+                    });
+                  } else {
+                    updatePlayer({ zonePoints: Math.max(0, currentPlayer.zonePoints + activeMystery.value) });
+                  }
+                  setPhase('BOARD'); nextTurn();
+                }}
+                className="w-full bg-white text-purple-900"
+              >
+                PROCESAR
+              </Button>
+            </Card>
+          </Modal>
+
+          <Modal isOpen={phase === 'CONQUEST'}>
+            <Card className="space-y-6 p-8 relative">
+              <button onClick={() => setPhase('BOARD')} className="absolute top-4 right-4 text-3xl">×</button>
+              <h2 className="text-3xl font-black italic text-indigo-400">CENTRO DE CONQUISTA</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {Object.values(ZoneType).map(z => {
+                  const done = currentPlayer.conqueredZones.includes(z);
+                  const can = currentPlayer.zonePoints >= ZONE_COSTS[z];
+                  return (
+                    <div
+                      key={z}
+                      onClick={() => !done && can && conquerZone(z)}
+                      className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-2 ${
+                        done ? 'bg-emerald-500/10 border-emerald-500 opacity-100'
+                        : can ? 'bg-indigo-600/10 border-indigo-500 cursor-pointer hover:scale-105 active:scale-95'
+                        : 'bg-slate-800 border-slate-700 opacity-20 grayscale'
+                      }`}
+                    >
+                      <div className="text-4xl">
+                        {z === ZoneType.CRITICAL_THINKING && '🧠'}
+                        {z === ZoneType.MEMORY && '👁️'}
+                        {z === ZoneType.CREATIVITY && '🎨'}
+                        {z === ZoneType.MOTOR && '⚡'}
+                      </div>
+                      <div className="font-black">{done ? 'CONQUISTADO' : `${ZONE_COSTS[z]} PTS`}</div>
+                      <div className="text-[10px] uppercase font-bold text-slate-400">{z}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </Modal>
+
+          <Modal isOpen={!!challenge}>
+            <div className="w-full max-w-lg">
+              {challenge === ZoneType.MOTOR && <MotorChallenge onComplete={finishChallenge} />}
+              {challenge === ZoneType.MEMORY && <MemoryChallenge onComplete={finishChallenge} />}
+              {challenge === ZoneType.CRITICAL_THINKING && <LogicChallenge onComplete={finishChallenge} />}
+              {challenge === ZoneType.CREATIVITY && <CreativityChallenge onComplete={finishChallenge} />}
+            </div>
+          </Modal>
+
+          {loading && (
+            <div className="fixed inset-0 z-[300] bg-slate-950/90 flex flex-col items-center justify-center animate-pulse">
+              <div className="w-24 h-24 border-8 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <p className="text-2xl font-black tracking-widest">SINCRONIZANDO...</p>
+            </div>
+          )}
+
+          {phase === 'WIN' && (
+            <div className="fixed inset-0 z-[400] bg-slate-950 flex flex-col items-center justify-center p-8">
+              <div className="text-[12rem] mb-4 animate-bounce">{currentPlayer.avatar}</div>
+              <h1 className="text-6xl md:text-8xl font-black italic mb-2" style={{ color: currentPlayer.color }}>
+                ¡{currentPlayer.name} GANA!
+              </h1>
+              <p className="text-2xl text-slate-400 mb-8">Has dominado todas las zonas de la galaxia.</p>
+              <Button onClick={() => window.location.reload()} className="px-12 py-6 text-3xl">NUEVA MISIÓN</Button>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const SetupForm = ({ onComplete }) => {
+      const [count, setCount] = useState(2);
+      const [names, setNames] = useState(['Explorador 1', 'Explorador 2', 'Explorador 3', 'Explorador 4']);
+      const [avatars, setAvatars] = useState([]);
+
+      return (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-slate-800 p-3 rounded-2xl">
+            <span className="font-bold">N° TRIPULANTES:</span>
+            <div className="flex gap-2">
+              {[2, 3, 4].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setCount(n)}
+                  className={`w-10 h-10 rounded-lg font-black transition-all ${
+                    count === n ? 'bg-indigo-600 border border-white' : 'bg-slate-700 opacity-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {Array.from({ length: count }).map((_, i) => (
+            <div key={i} className="p-4 bg-slate-800/40 rounded-2xl space-y-3">
+              <input
+                value={names[i]}
+                onChange={e => { const n = [...names]; n[i] = e.target.value; setNames(n); }}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 outline-none focus:border-indigo-500"
+                placeholder={`Nombre Explorador ${i + 1}`}
+              />
+              <div className="flex flex-wrap gap-2 justify-center">
+                {AVATARS.map(a => (
+                  <button
+                    key={a}
+                    onClick={() => { const s = [...avatars]; s[i] = a; setAvatars(s); }}
+                    className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center border-2 transition-all ${
+                      avatars[i] === a ? 'bg-indigo-600 border-white' : 'bg-slate-900 border-slate-800 opacity-40 hover:opacity-100'
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <Button
+            disabled={avatars.filter(Boolean).length < count}
+            onClick={() => onComplete(count, names, avatars)}
+            className="w-full py-4 text-xl"
+          >
+            DESPEGAR
+          </Button>
+        </div>
+      );
+    };
+
+    const QuestionInput = ({ onAnswer }) => {
+      const [val, setVal] = useState('');
+      return (
+        <div className="space-y-4">
+          <input
+            autoFocus
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onAnswer(val)}
+            className="w-full bg-slate-950 border-2 border-slate-700 rounded-2xl p-6 text-center text-3xl outline-none focus:border-indigo-500 shadow-inner"
+            placeholder="..."
+          />
+          <Button onClick={() => onAnswer(val)} className="w-full py-6 text-2xl">
+            TRANSMITIR
+          </Button>
+        </div>
+      );
+    };
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
 </html>
